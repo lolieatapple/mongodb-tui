@@ -7,6 +7,24 @@
 	"engines": {
 		"node": ">=16"
 	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/lolieatapple/mongodb-tui.git"
+	},
+	"homepage": "https://github.com/lolieatapple/mongodb-tui",
+	"bugs": {
+		"url": "https://github.com/lolieatapple/mongodb-tui/issues"
+	},
+	"keywords": [
+		"mongodb",
+		"tui",
+		"cli",
+		"terminal",
+		"database",
+		"nosql",
+		"react",
+		"ink"
+	],
 	"scripts": {
 		"build": "babel --out-dir=dist source",
 		"dev": "babel --out-dir=dist --watch source",
