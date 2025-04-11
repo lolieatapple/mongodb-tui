@@ -24,6 +24,10 @@ const DocumentViewer = ({ collection, onBack }) => {
   const [selectedCol, setSelectedCol] = useState(0);
   const [fields, setFields] = useState([]);
   const [columnOffset, setColumnOffset] = useState(0); // 添加列偏移量状态
+  // 添加详情视图状态
+  const [detailMode, setDetailMode] = useState(false);
+  const [detailField, setDetailField] = useState('');
+  const [detailValue, setDetailValue] = useState('');
   
   // 根据终端宽度计算可见列数和列宽
   const terminalWidth = stdout.columns || 80;
@@ -144,6 +148,25 @@ const DocumentViewer = ({ collection, onBack }) => {
     return actualColIndex < fields.length ? fields[actualColIndex] : '_id';
   };
 
+  // 获取当前选中的字段值
+  const getCurrentFieldValue = () => {
+    if (documents.length === 0 || selectedRow >= documents.length) return '';
+    const fieldName = getCurrentFieldName();
+    return documents[selectedRow][fieldName];
+  };
+
+  // 打开字段详情视图
+  const openDetailView = () => {
+    if (documents.length === 0) return;
+    
+    const fieldName = getCurrentFieldName();
+    const fieldValue = getCurrentFieldValue();
+    
+    setDetailMode(true);
+    setDetailField(fieldName);
+    setDetailValue(fieldValue);
+  };
+
   // Handle keyboard input
   useInput((input, key) => {
     if (key.escape) {
@@ -155,11 +178,19 @@ const DocumentViewer = ({ collection, onBack }) => {
         setEditField('');
         setEditValue('');
         setEditDocId(null);
+      } else if (detailMode) {
+        // 退出详情视图
+        setDetailMode(false);
+        setDetailField('');
+        setDetailValue('');
       } else {
         onBack();
       }
       return;
     }
+    
+    // 如果在详情视图模式，只处理ESC键
+    if (detailMode) return;
     
     // If in special modes, don't process other keys
     if (searchMode || editMode) return;
@@ -178,7 +209,10 @@ const DocumentViewer = ({ collection, onBack }) => {
       return;
     }
     
-    if (key.pageDown && (page + 1) * pageSize < totalCount) {
+    if (key.return) {
+      // 回车键打开详情视图
+      openDetailView();
+    } else if (key.pageDown && (page + 1) * pageSize < totalCount) {
       // Page Down key for next page
       setPage(p => p + 1);
     } else if (key.pageUp && page > 0) {
@@ -299,6 +333,54 @@ const DocumentViewer = ({ collection, onBack }) => {
     }
   };
 
+  // 渲染字段详情视图
+  const renderDetailView = () => {
+    // 将值格式化为字符串
+    let formattedValue = '';
+    if (detailValue === null || detailValue === undefined) {
+      formattedValue = 'null';
+    } else if (typeof detailValue === 'object') {
+      try {
+        formattedValue = JSON.stringify(detailValue, null, 2);
+      } catch (e) {
+        formattedValue = String(detailValue);
+      }
+    } else {
+      formattedValue = String(detailValue);
+    }
+
+    return (
+      <Box flexDirection="column" width={terminalWidth}>
+        <Box marginBottom={1}>
+          <Text bold>Field Detail View</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text bold>Document ID: </Text>
+          <Text>{documents[selectedRow]._id?.toString() || 'Unknown'}</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text bold>Field Name: </Text>
+          <Text>{detailField}</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text bold>Field Type: </Text>
+          <Text>{typeof detailValue === 'object' ? (detailValue === null ? 'null' : Array.isArray(detailValue) ? 'array' : 'object') : typeof detailValue}</Text>
+        </Box>
+        <Box flexDirection="column" marginY={1}>
+          <Text bold>Field Value:</Text>
+          <Box flexDirection="column" marginLeft={2} marginTop={1}>
+            {formattedValue.split('\n').map((line, i) => (
+              <Text key={i}>{line}</Text>
+            ))}
+          </Box>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to go back</Text>
+        </Box>
+      </Box>
+    );
+  };
+
   // Render search input
   if (searchMode) {
     return (
@@ -341,6 +423,11 @@ const DocumentViewer = ({ collection, onBack }) => {
         </Box>
       </Box>
     );
+  }
+
+  // 显示详情视图
+  if (detailMode) {
+    return renderDetailView();
   }
 
   if (loading) {
@@ -433,7 +520,7 @@ const DocumentViewer = ({ collection, onBack }) => {
           PgUp/PgDn: Navigate pages | ↑↓←→: Select field | e: Edit selected field | o: Toggle sort
         </Text>
         <Text dimColor>
-          f: First page | l: Last page | s: Search | [: First columns | ]: Last columns | ESC: Back
+          f: First page | l: Last page | s: Search | [: First columns | ]: Last columns | Enter: View details | ESC: Back
         </Text>
         {searchField && searchValue && (
           <Text>

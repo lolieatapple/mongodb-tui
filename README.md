@@ -23,6 +23,20 @@ npm install -g mongodb-tui
 yarn global add mongodb-tui
 ```
 
+### Troubleshooting
+
+If you installed with `yarn global add` but the `mongodb-tui` command is not found, you may need to add yarn's global bin directory to your PATH:
+
+```bash
+# Add yarn global bin to PATH
+echo 'export PATH="$(yarn global bin):$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# For zsh users
+echo 'export PATH="$(yarn global bin):$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ## Usage
 
 ```bash
@@ -39,6 +53,7 @@ mongodb-tui --url=mongodb://username:password@hostname:port/database
 - `↑` / `↓`: Navigate between document rows
 - `←` / `→`: Navigate between document fields (columns)
 - `Page Up` / `Page Down`: Navigate between pages
+- `Enter`: View detailed content of the selected field
 - `s`: Enter search mode
 - `o`: Toggle sort order (ascending/descending)
 - `e`: Edit selected field of the selected document
