@@ -10,13 +10,13 @@ const ConnectionForm = ({ onConnect, defaultUrl = 'mongodb://localhost:27017' })
   };
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="single" borderColor="green" padding={1}>
       <Box marginBottom={1}>
-        <Text bold>MongoDB Connection</Text>
+        <Text bold color="green">🔌 MongoDB Connection</Text>
       </Box>
       <Box>
         <Box marginRight={1}>
-          <Text>URL:</Text>
+          <Text color="yellow" bold>URL:</Text>
         </Box>
         <TextInput 
           value={url} 
@@ -26,7 +26,7 @@ const ConnectionForm = ({ onConnect, defaultUrl = 'mongodb://localhost:27017' })
         />
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>Press Enter to connect</Text>
+        <Text color="gray">Press <Text color="green" bold>Enter</Text> to connect</Text>
       </Box>
     </Box>
   );

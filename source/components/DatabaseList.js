@@ -41,8 +41,8 @@ const DatabaseList = ({ client, onSelectDatabase, onBack }) => {
     return (
       <Box>
         <Text>
-          <Spinner type="dots" />
-          {' Loading databases...'}
+          <Text color="yellow"><Spinner type="dots" /></Text>
+          <Text color="cyan"> Loading databases...</Text>
         </Text>
       </Box>
     );
@@ -50,30 +50,35 @@ const DatabaseList = ({ client, onSelectDatabase, onBack }) => {
 
   if (error) {
     return (
-      <Box flexDirection="column">
-        <Text color="red">Error loading databases:</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor="red" padding={1}>
+        <Text bold color="red">Error loading databases:</Text>
         <Text color="red">{error}</Text>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
         </Box>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="single" borderColor="cyan" padding={1}>
       <Box marginBottom={1}>
-        <Text bold>Select a Database</Text>
+        <Text bold color="cyan">📂 Select a Database</Text>
       </Box>
       <SelectInput 
         items={databases} 
-        onSelect={item => onSelectDatabase(item.value)} 
+        onSelect={item => onSelectDatabase(item.value)}
+        itemComponent={({ isSelected, label }) => (
+          <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+            {isSelected ? '● ' : '  '}{label}
+          </Text>
+        )}
       />
       <Box marginTop={1}>
-        <Text dimColor>Use arrow keys to navigate, Enter to select</Text>
+        <Text color="gray">Use <Text color="cyan" bold>↑↓</Text> to navigate, <Text color="green" bold>Enter</Text> to select</Text>
       </Box>
       <Box>
-        <Text dimColor>Press ESC to go back</Text>
+        <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
       </Box>
     </Box>
   );

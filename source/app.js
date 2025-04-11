@@ -56,16 +56,23 @@ export default function App() {
 	};
 
 	return (
-		<Box flexDirection="column" padding={1}>
+		<Box flexDirection="column" padding={1} borderStyle="round" borderColor="green">
 			<Box marginBottom={1}>
-				<Text bold backgroundColor="blue" color="white" padding={1}>
-					MongoDB TUI
+				<Text bold backgroundColor="green" color="black" padding={1}>
+					🍃 MongoDB TUI
 				</Text>
+				{view !== 'connection' && (
+					<Text backgroundColor="yellow" color="black" padding={1} marginLeft={1}>
+						{view === 'databases' && '📂 Databases'}
+						{view === 'collections' && `📁 ${currentDb?.databaseName}`}
+						{view === 'documents' && `📄 ${currentCollection?.collectionName}`}
+					</Text>
+				)}
 			</Box>
 
 			{error && (
-				<Box marginBottom={1}>
-					<Text color="red">{error}</Text>
+				<Box marginBottom={1} borderStyle="single" borderColor="red" padding={1}>
+					<Text color="red" bold>{error}</Text>
 				</Box>
 			)}
 
@@ -95,7 +102,7 @@ export default function App() {
 
 			{view !== 'connection' && (
 				<Box marginTop={1}>
-					<Text dimColor>Press ESC to go back</Text>
+					<Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
 				</Box>
 			)}
 		</Box>

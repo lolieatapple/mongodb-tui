@@ -40,8 +40,8 @@ const CollectionList = ({ db, onSelectCollection, onBack }) => {
     return (
       <Box>
         <Text>
-          <Spinner type="dots" />
-          {' Loading collections...'}
+          <Text color="magenta"><Spinner type="dots" /></Text>
+          <Text color="cyan"> Loading collections...</Text>
         </Text>
       </Box>
     );
@@ -49,11 +49,11 @@ const CollectionList = ({ db, onSelectCollection, onBack }) => {
 
   if (error) {
     return (
-      <Box flexDirection="column">
-        <Text color="red">Error loading collections:</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor="red" padding={1}>
+        <Text bold color="red">Error loading collections:</Text>
         <Text color="red">{error}</Text>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
         </Box>
       </Box>
     );
@@ -61,29 +61,34 @@ const CollectionList = ({ db, onSelectCollection, onBack }) => {
 
   if (collections.length === 0) {
     return (
-      <Box flexDirection="column">
-        <Text>No collections found in this database.</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
+        <Text color="yellow" bold>No collections found in this database.</Text>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
         </Box>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" borderStyle="single" borderColor="magenta" padding={1}>
       <Box marginBottom={1}>
-        <Text bold>Select a Collection</Text>
+        <Text bold color="magenta">📁 Select a Collection</Text>
       </Box>
       <SelectInput 
         items={collections} 
-        onSelect={item => onSelectCollection(item.value)} 
+        onSelect={item => onSelectCollection(item.value)}
+        itemComponent={({ isSelected, label }) => (
+          <Text color={isSelected ? 'green' : 'white'} bold={isSelected}>
+            {isSelected ? '● ' : '  '}{label}
+          </Text>
+        )}
       />
       <Box marginTop={1}>
-        <Text dimColor>Use arrow keys to navigate, Enter to select</Text>
+        <Text color="gray">Use <Text color="cyan" bold>↑↓</Text> to navigate, <Text color="green" bold>Enter</Text> to select</Text>
       </Box>
       <Box>
-        <Text dimColor>Press ESC to go back</Text>
+        <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
       </Box>
     </Box>
   );

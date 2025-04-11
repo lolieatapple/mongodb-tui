@@ -32,16 +32,20 @@ const DocumentViewer = ({ collection, onBack }) => {
   // 根据终端宽度计算可见列数和列宽
   const terminalWidth = stdout.columns || 80;
   const minColumnWidth = 15; // 最小列宽
-  const maxColumnWidth = 40; // 最大列宽
+  const maxColumnWidth = 30; // 减小最大列宽以适应边框
   const padding = 2; // 列间距
-  const reservedWidth = 10; // 为其他UI元素预留的宽度
+  // 调整预留宽度，考虑边框和内边距的影响
+  const borderAndPaddingWidth = 6; // 边框和内边距占用的宽度 (左右各2个字符的边框 + 左右各1个字符的内边距)
+  const otherUIWidth = 16; // 其他UI元素占用的宽度
+  const reservedWidth = borderAndPaddingWidth + otherUIWidth; // 总预留宽度
   
   // 计算每列的宽度和可见列数
   const calculateColumnSettings = () => {
+    // 考虑边框和内边距后的可用宽度
     const availableWidth = terminalWidth - reservedWidth;
     
     // 根据可用宽度计算合适的列宽
-    let columnWidth = Math.min(maxColumnWidth, Math.max(minColumnWidth, Math.floor(availableWidth / 5)));
+    let columnWidth = Math.min(maxColumnWidth, Math.max(minColumnWidth, Math.floor(availableWidth / 3)));
     
     // 计算可以显示的列数
     const visibleColumns = Math.max(1, Math.floor(availableWidth / (columnWidth + padding)));
@@ -335,91 +339,203 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   // 渲染字段详情视图
   const renderDetailView = () => {
-    // 将值格式化为字符串
-    let formattedValue = '';
-    if (detailValue === null || detailValue === undefined) {
-      formattedValue = 'null';
-    } else if (typeof detailValue === 'object') {
+    const isObject = typeof detailValue === 'object' && detailValue !== null;
+    let formattedValue;
+    
+    // 处理对象和数组
+    if (isObject) {
       try {
-        formattedValue = JSON.stringify(detailValue, null, 2);
+        // 使用自定义的格式化函数处理JSON对象，确保长字符串正确换行
+        formattedValue = formatDetailJSON(detailValue);
       } catch (e) {
         formattedValue = String(detailValue);
       }
     } else {
       formattedValue = String(detailValue);
     }
-
+    
+    // 计算详情视图的内容宽度
+    const contentWidth = terminalWidth - borderAndPaddingWidth - 8; // 减去边框、内边距和缩进
+    
     return (
-      <Box flexDirection="column" width={terminalWidth}>
+      <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="cyan" padding={1}>
         <Box marginBottom={1}>
-          <Text bold>Field Detail View</Text>
+          <Text bold backgroundColor="cyan" color="black" padding={1}>
+            Field Details
+          </Text>
         </Box>
-        <Box marginBottom={1}>
-          <Text bold>Document ID: </Text>
-          <Text>{documents[selectedRow]._id?.toString() || 'Unknown'}</Text>
+        
+        <Box flexDirection="column" marginBottom={1}>
+          <Box>
+            <Text color="yellow" bold>Document ID: </Text>
+            <Text>{editDocId ? String(editDocId) : documents[selectedRow]?._id?.toString() || 'N/A'}</Text>
+          </Box>
+          <Box>
+            <Text color="yellow" bold>Field Name: </Text>
+            <Text color="green">{detailField}</Text>
+          </Box>
+          <Box>
+            <Text color="yellow" bold>Field Type: </Text>
+            <Text color="magenta">{isObject ? (Array.isArray(detailValue) ? 'Array' : 'Object') : typeof detailValue}</Text>
+          </Box>
         </Box>
-        <Box marginBottom={1}>
-          <Text bold>Field Name: </Text>
-          <Text>{detailField}</Text>
-        </Box>
-        <Box marginBottom={1}>
-          <Text bold>Field Type: </Text>
-          <Text>{typeof detailValue === 'object' ? (detailValue === null ? 'null' : Array.isArray(detailValue) ? 'array' : 'object') : typeof detailValue}</Text>
-        </Box>
-        <Box flexDirection="column" marginY={1}>
-          <Text bold>Field Value:</Text>
-          <Box flexDirection="column" marginLeft={2} marginTop={1}>
+        
+        <Box flexDirection="column" borderStyle="single" borderColor="gray" padding={1} marginBottom={1} width={terminalWidth - 10}>
+          <Text color="cyan" bold>Value:</Text>
+          <Box flexDirection="column" marginLeft={1} marginTop={1}>
             {formattedValue.split('\n').map((line, i) => (
               <Text key={i}>{line}</Text>
             ))}
           </Box>
         </Box>
-        <Box marginTop={1}>
-          <Text dimColor>Press ESC to go back</Text>
+        
+        <Box>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
         </Box>
       </Box>
     );
   };
 
-  // Render search input
+  // Helper function to format values for display
+  const formatValue = (value, maxWidth = 20) => {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'object') {
+      if (value instanceof Date) return value.toISOString();
+      const stringified = JSON.stringify(value);
+      return stringified.substring(0, maxWidth - 3) + (stringified.length > maxWidth - 3 ? '...' : '');
+    }
+    const stringValue = String(value);
+    return stringValue.substring(0, maxWidth - 3) + (stringValue.length > maxWidth - 3 ? '...' : '');
+  };
+
+  // 用于详情视图的JSON格式化函数，确保长字符串完整显示并正确换行
+  const formatDetailJSON = (obj) => {
+    try {
+      // 先使用标准JSON.stringify进行格式化
+      const formatted = JSON.stringify(obj, null, 2);
+      
+      // 处理长字符串
+      const lines = formatted.split('\n');
+      const processedLines = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // 匹配包含长字符串的行
+        const match = line.match(/^(\s*)(".*?"):\s*"(.+?)"(,?)$/);
+        
+        if (match && match[3].length > 80) {
+          // 这是一个长字符串属性
+          const [_, indent, key, value, comma] = match;
+          
+          // 添加字段名
+          processedLines.push(`${indent}${key}: "`);
+          
+          // 将长字符串分成多行，每行最多80个字符
+          for (let j = 0; j < value.length; j += 80) {
+            const chunk = value.substring(j, j + 80);
+            const isLastChunk = j + 80 >= value.length;
+            
+            if (isLastChunk) {
+              // 最后一行，添加结束引号和可能的逗号
+              processedLines.push(`${indent}  ${chunk}"${comma}`);
+            } else {
+              processedLines.push(`${indent}  ${chunk}`);
+            }
+          }
+        } else {
+          // 普通行，直接添加
+          processedLines.push(line);
+        }
+      }
+      
+      return processedLines.join('\n');
+    } catch (e) {
+      // 如果自定义格式化失败，回退到标准格式化
+      try {
+        return JSON.stringify(obj, null, 2);
+      } catch (err) {
+        return String(obj);
+      }
+    }
+  };
+
+  // 搜索模式界面
   if (searchMode) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="yellow" padding={1}>
         <Box marginBottom={1}>
-          <Text>Searching field: <Text bold>{searchField}</Text></Text>
+          <Text bold color="yellow">🔍 Search Documents</Text>
         </Box>
-        <Box>
-          <Text>Enter search value:</Text>
+        <Box marginBottom={1}>
+          <Text>Searching in field: <Text bold color="green">{getCurrentFieldName()}</Text></Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Box marginRight={1}>
+            <Text color="yellow" bold>Search Value:</Text>
+          </Box>
           <TextInput 
             value={searchValue} 
             onChange={setSearchValue} 
-            onSubmit={() => handleSearchSubmit()} 
+            onSubmit={handleSearchSubmit}
           />
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to cancel search</Text>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to cancel search</Text>
         </Box>
       </Box>
     );
   }
 
-  // Render edit input
-  if (editMode) {
+  // 编辑字段名称模式
+  if (editMode && !editField) {
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="magenta" padding={1}>
         <Box marginBottom={1}>
-          <Text>Editing field: <Text bold>{editField}</Text></Text>
+          <Text bold color="magenta">✏️ Edit Field</Text>
         </Box>
-        <Box>
-          <Text>Enter new value:</Text>
+        <Box marginBottom={1}>
+          <Text>Editing document with ID: <Text bold color="green">{documents[selectedRow]._id?.toString()}</Text></Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Box marginRight={1}>
+            <Text color="yellow" bold>Field Name:</Text>
+          </Box>
           <TextInput 
-            value={editValue} 
-            onChange={setEditValue} 
-            onSubmit={handleEditValueSubmit} 
+            value={editField} 
+            onChange={setEditField} 
+            onSubmit={handleEditFieldSubmit}
           />
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Press ESC to cancel editing</Text>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to cancel editing</Text>
+        </Box>
+      </Box>
+    );
+  }
+
+  // 编辑字段值模式
+  if (editMode && editField) {
+    return (
+      <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="magenta" padding={1}>
+        <Box marginBottom={1}>
+          <Text bold color="magenta">✏️ Edit Value</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text>Editing field <Text bold color="green">{editField}</Text> in document with ID: <Text bold color="green">{documents[selectedRow]._id?.toString()}</Text></Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Box marginRight={1}>
+            <Text color="yellow" bold>New Value:</Text>
+          </Box>
+          <TextInput 
+            value={editValue} 
+            onChange={setEditValue} 
+            onSubmit={handleEditValueSubmit}
+          />
+        </Box>
+        <Box marginTop={1}>
+          <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to cancel editing</Text>
         </Box>
       </Box>
     );
@@ -434,8 +550,8 @@ const DocumentViewer = ({ collection, onBack }) => {
     return (
       <Box>
         <Text>
-          <Spinner type="dots" />
-          {' Loading documents...'}
+          <Text color="green"><Spinner type="dots" /></Text>
+          <Text color="cyan"> Loading documents...</Text>
         </Text>
       </Box>
     );
@@ -443,18 +559,18 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   if (error) {
     return (
-      <Box flexDirection="column">
-        <Text color="red">Error: {error}</Text>
-        <Text>Press ESC to go back</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor="red" padding={1}>
+        <Text color="red" bold>Error: {error}</Text>
+        <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
       </Box>
     );
   }
 
   if (documents.length === 0) {
     return (
-      <Box flexDirection="column">
-        <Text>No documents found in this collection.</Text>
-        <Text>Press ESC to go back</Text>
+      <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1}>
+        <Text color="yellow" bold>No documents found in this collection.</Text>
+        <Text color="gray">Press <Text color="cyan" bold>ESC</Text> to go back</Text>
       </Box>
     );
   }
@@ -466,15 +582,15 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   // Render document table
   return (
-    <Box flexDirection="column" width={terminalWidth}>
+    <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="blue" padding={1}>
       <Box marginBottom={1}>
-        <Text bold>Collection Documents</Text>
-        <Text> (Total: {totalCount} documents | Page {page + 1} of {Math.ceil(totalCount / pageSize)} | Terminal width: {terminalWidth}px)</Text>
+        <Text bold color="blue">📄 Collection Documents</Text>
+        <Text color="cyan"> (Total: <Text color="green" bold>{totalCount}</Text> documents | Page <Text color="green" bold>{page + 1}</Text> of <Text color="green" bold>{Math.ceil(totalCount / pageSize)}</Text>)</Text>
       </Box>
       
       {/* 列导航指示器 */}
       <Box marginBottom={1}>
-        <Text>
+        <Text color="magenta">
           Fields {columnOffset + 1}-{Math.min(columnOffset + visibleColumns, fields.length)} of {fields.length}
           {hasMoreLeft && ' « more fields'}
           {hasMoreRight && ' more fields »'}
@@ -489,7 +605,7 @@ const DocumentViewer = ({ collection, onBack }) => {
               bold 
               underline={field === sortField}
               backgroundColor={index === selectedCol ? 'cyan' : undefined}
-              color={index === selectedCol ? 'black' : undefined}
+              color={index === selectedCol ? 'black' : 'yellow'}
             >
               {field} {field === sortField ? (sortDirection === 1 ? '↑' : '↓') : ''}
             </Text>
@@ -515,33 +631,30 @@ const DocumentViewer = ({ collection, onBack }) => {
       ))}
       
       {/* Controls */}
-      <Box marginTop={1} flexDirection="column">
-        <Text dimColor>
-          PgUp/PgDn: Navigate pages | ↑↓←→: Select field | e: Edit selected field | o: Toggle sort
+      <Box marginTop={1} flexDirection="column" borderStyle="single" borderColor="gray" padding={1}>
+        <Text color="gray">
+          <Text color="cyan" bold>PgUp</Text>/<Text color="cyan" bold>PgDn</Text>: Navigate pages | 
+          <Text color="cyan" bold>↑↓←→</Text>: Select field | 
+          <Text color="green" bold>e</Text>: Edit selected field | 
+          <Text color="green" bold>o</Text>: Toggle sort
         </Text>
-        <Text dimColor>
-          f: First page | l: Last page | s: Search | [: First columns | ]: Last columns | Enter: View details | ESC: Back
+        <Text color="gray">
+          <Text color="green" bold>f</Text>: First page | 
+          <Text color="green" bold>l</Text>: Last page | 
+          <Text color="green" bold>s</Text>: Search | 
+          <Text color="green" bold>[</Text>: First columns | 
+          <Text color="green" bold>]</Text>: Last columns | 
+          <Text color="cyan" bold>Enter</Text>: View details | 
+          <Text color="cyan" bold>ESC</Text>: Back
         </Text>
         {searchField && searchValue && (
           <Text>
-            Filtering by: {searchField} = {searchValue}
+            Filtering by: <Text color="yellow" bold>{searchField}</Text> = <Text color="green" bold>{searchValue}</Text>
           </Text>
         )}
       </Box>
     </Box>
   );
-};
-
-// Helper function to format values for display
-const formatValue = (value, maxWidth = 20) => {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'object') {
-    if (value instanceof Date) return value.toISOString();
-    const stringified = JSON.stringify(value);
-    return stringified.substring(0, maxWidth - 3) + (stringified.length > maxWidth - 3 ? '...' : '');
-  }
-  const stringValue = String(value);
-  return stringValue.substring(0, maxWidth - 3) + (stringValue.length > maxWidth - 3 ? '...' : '');
 };
 
 export default DocumentViewer;
