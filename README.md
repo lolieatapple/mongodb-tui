@@ -13,21 +13,14 @@ A terminal-based user interface for MongoDB built with [Ink](https://github.com/
 - Navigate using keyboard shortcuts
 - Horizontal scrolling to view all document fields
 
-## Install
+## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/mongodb-tui.git
-cd mongodb-tui
+# Install globally from npm
+npm install -g mongodb-tui
 
-# Install dependencies
-npm install
-
-# Build the application
-npm run build
-
-# Link the package globally (optional)
-npm link
+# Or using yarn
+yarn global add mongodb-tui
 ```
 
 ## Usage
@@ -57,13 +50,43 @@ mongodb-tui --url=mongodb://username:password@hostname:port/database
 
 ## Development
 
+### Setup Development Environment
+
 ```bash
+# Clone the repository
+git clone https://github.com/yourusername/mongodb-tui.git
+cd mongodb-tui
+
+# Install dependencies
+npm install
+
 # Watch for changes and rebuild
 npm run dev
 
 # In another terminal, run the app
 node dist/cli.js
 ```
+
+### Publishing to npm
+
+```bash
+# Update version in package.json (patch, minor, or major)
+npm version patch
+
+# Build the application
+npm run build
+
+# Login to npm
+npm login
+
+# Publish the package
+npm publish
+
+# Or publish with a specific tag
+npm publish --tag beta
+```
+
+Make sure to update the version number in `package.json` before publishing a new version. You can use `npm version patch`, `npm version minor`, or `npm version major` to automatically increment the version number according to [semantic versioning](https://semver.org/) principles.
 
 ## License
 
