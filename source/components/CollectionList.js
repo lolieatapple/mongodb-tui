@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 
-const CollectionList = ({ db, onSelectCollection }) => {
+const CollectionList = ({ db, onSelectCollection, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [collections, setCollections] = useState([]);
   const [error, setError] = useState(null);
@@ -29,6 +29,13 @@ const CollectionList = ({ db, onSelectCollection }) => {
     fetchCollections();
   }, [db]);
 
+  // Handle ESC key press
+  useInput((input, key) => {
+    if (key.escape) {
+      onBack();
+    }
+  });
+
   if (loading) {
     return (
       <Box>
@@ -45,6 +52,9 @@ const CollectionList = ({ db, onSelectCollection }) => {
       <Box flexDirection="column">
         <Text color="red">Error loading collections:</Text>
         <Text color="red">{error}</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to go back</Text>
+        </Box>
       </Box>
     );
   }
@@ -53,6 +63,9 @@ const CollectionList = ({ db, onSelectCollection }) => {
     return (
       <Box flexDirection="column">
         <Text>No collections found in this database.</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to go back</Text>
+        </Box>
       </Box>
     );
   }
@@ -68,6 +81,9 @@ const CollectionList = ({ db, onSelectCollection }) => {
       />
       <Box marginTop={1}>
         <Text dimColor>Use arrow keys to navigate, Enter to select</Text>
+      </Box>
+      <Box>
+        <Text dimColor>Press ESC to go back</Text>
       </Box>
     </Box>
   );

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import Spinner from 'ink-spinner';
 
-const DatabaseList = ({ client, onSelectDatabase }) => {
+const DatabaseList = ({ client, onSelectDatabase, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [databases, setDatabases] = useState([]);
   const [error, setError] = useState(null);
@@ -30,6 +30,13 @@ const DatabaseList = ({ client, onSelectDatabase }) => {
     fetchDatabases();
   }, [client]);
 
+  // Handle ESC key press
+  useInput((input, key) => {
+    if (key.escape) {
+      onBack();
+    }
+  });
+
   if (loading) {
     return (
       <Box>
@@ -46,6 +53,9 @@ const DatabaseList = ({ client, onSelectDatabase }) => {
       <Box flexDirection="column">
         <Text color="red">Error loading databases:</Text>
         <Text color="red">{error}</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to go back</Text>
+        </Box>
       </Box>
     );
   }
@@ -61,6 +71,9 @@ const DatabaseList = ({ client, onSelectDatabase }) => {
       />
       <Box marginTop={1}>
         <Text dimColor>Use arrow keys to navigate, Enter to select</Text>
+      </Box>
+      <Box>
+        <Text dimColor>Press ESC to go back</Text>
       </Box>
     </Box>
   );

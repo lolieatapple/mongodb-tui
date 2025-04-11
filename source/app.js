@@ -74,11 +74,19 @@ export default function App() {
 			)}
 
 			{view === 'databases' && connected && (
-				<DatabaseList client={client} onSelectDatabase={handleSelectDatabase} />
+				<DatabaseList 
+					client={client} 
+					onSelectDatabase={handleSelectDatabase} 
+					onBack={handleBack}
+				/>
 			)}
 
 			{view === 'collections' && currentDb && (
-				<CollectionList db={currentDb} onSelectCollection={handleSelectCollection} />
+				<CollectionList 
+					db={currentDb} 
+					onSelectCollection={handleSelectCollection} 
+					onBack={handleBack}
+				/>
 			)}
 
 			{view === 'documents' && currentCollection && (

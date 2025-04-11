@@ -11,6 +11,7 @@ A terminal-based user interface for MongoDB built with [Ink](https://github.com/
 - Search documents by field values
 - Edit document fields
 - Navigate using keyboard shortcuts
+- Horizontal scrolling to view all document fields
 
 ## Install
 
@@ -42,14 +43,17 @@ mongodb-tui --url=mongodb://username:password@hostname:port/database
 ## Keyboard Shortcuts
 
 ### In Document View
-- `←` / `→`: Navigate between pages
-- `↑` / `↓`: Select document rows
+- `↑` / `↓`: Navigate between document rows
+- `←` / `→`: Navigate between document fields (columns)
+- `Page Up` / `Page Down`: Navigate between pages
 - `s`: Enter search mode
 - `o`: Toggle sort order (ascending/descending)
-- `e`: Edit selected document
+- `e`: Edit selected field of the selected document
 - `f`: Go to first page
 - `l`: Go to last page
-- `ESC`: Go back to previous view
+- `[`: Scroll to first columns
+- `]`: Scroll to last columns
+- `ESC`: Go back to previous view or cancel current operation
 
 ## Development
 

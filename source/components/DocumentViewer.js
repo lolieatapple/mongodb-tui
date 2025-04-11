@@ -20,7 +20,10 @@ const DocumentViewer = ({ collection, onBack }) => {
   const [editValue, setEditValue] = useState('');
   const [editDocId, setEditDocId] = useState(null);
   const [selectedRow, setSelectedRow] = useState(0);
+  const [selectedCol, setSelectedCol] = useState(0);
   const [fields, setFields] = useState([]);
+  const [columnOffset, setColumnOffset] = useState(0); // 添加列偏移量状态
+  const visibleColumns = 5; // 一次显示的列数
 
   // Load documents with pagination, sorting, and optional filtering
   const loadDocuments = async () => {
@@ -82,33 +85,88 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   // Handle keyboard input
   useInput((input, key) => {
+    if (key.escape) {
+      // ESC key handling for all modes
+      if (searchMode) {
+        setSearchMode(false);
+      } else if (editMode) {
+        setEditMode(false);
+        setEditField('');
+        setEditValue('');
+        setEditDocId(null);
+      } else {
+        onBack();
+      }
+      return;
+    }
+    
+    // If in special modes, don't process other keys
     if (searchMode || editMode) return;
     
-    if (key.escape) {
-      onBack();
-    } else if (key.leftArrow && page > 0) {
-      setPage(p => p - 1);
-    } else if (key.rightArrow && (page + 1) * pageSize < totalCount) {
+    if (key.pageDown && (page + 1) * pageSize < totalCount) {
+      // Page Down key for next page
       setPage(p => p + 1);
+    } else if (key.pageUp && page > 0) {
+      // Page Up key for previous page
+      setPage(p => p - 1);
     } else if (key.upArrow && selectedRow > 0) {
+      // Up arrow to move selection up
       setSelectedRow(r => r - 1);
     } else if (key.downArrow && selectedRow < Math.min(documents.length - 1, pageSize - 1)) {
+      // Down arrow to move selection down
       setSelectedRow(r => r + 1);
+    } else if (key.leftArrow) {
+      if (selectedCol > 0) {
+        // 左箭头在当前可见列中移动
+        setSelectedCol(c => c - 1);
+      } else if (columnOffset > 0) {
+        // 如果已经在最左边的可见列，且有更多列在左侧，则滚动列
+        setColumnOffset(offset => offset - 1);
+      }
+    } else if (key.rightArrow) {
+      if (selectedCol < visibleColumns - 1 && selectedCol < fields.length - 1 - columnOffset) {
+        // 右箭头在当前可见列中移动
+        setSelectedCol(c => c + 1);
+      } else if (columnOffset + visibleColumns < fields.length) {
+        // 如果已经在最右边的可见列，且有更多列在右侧，则滚动列
+        setColumnOffset(offset => offset + 1);
+        if (selectedCol === visibleColumns - 1) {
+          // 如果选择在最右边的可见列，保持选择在最右边
+          setSelectedCol(visibleColumns - 1);
+        }
+      }
     } else if (input === 's') {
+      // Enter search mode
       setSearchMode(true);
     } else if (input === 'o') {
       // Toggle sort direction
       setSortDirection(d => d * -1);
     } else if (input === 'e' && documents.length > 0) {
-      // Enter edit mode for the selected document
-      setEditMode(true);
-      setEditDocId(documents[selectedRow]._id);
+      // Enter edit mode for the selected field of the selected document
+      if (fields.length > 0) {
+        const actualFieldIndex = columnOffset + selectedCol;
+        if (actualFieldIndex < fields.length) {
+          setEditMode(true);
+          setEditField(fields[actualFieldIndex]);
+          setEditDocId(documents[selectedRow]._id);
+          setEditValue(documents[selectedRow][fields[actualFieldIndex]]?.toString() || '');
+        }
+      }
     } else if (input === 'f') {
       // Go to first page
       setPage(0);
     } else if (input === 'l') {
       // Go to last page
       setPage(Math.floor(totalCount / pageSize));
+    } else if (input === '[') {
+      // 滚动到最左边的列
+      setColumnOffset(0);
+      setSelectedCol(0);
+    } else if (input === ']') {
+      // 滚动到最右边的列
+      const maxOffset = Math.max(0, fields.length - visibleColumns);
+      setColumnOffset(maxOffset);
+      setSelectedCol(Math.min(visibleColumns - 1, fields.length - 1 - maxOffset));
     }
   });
 
@@ -176,6 +234,9 @@ const DocumentViewer = ({ collection, onBack }) => {
             onSubmit={() => handleSearchSubmit()} 
           />
         </Box>
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to cancel search</Text>
+        </Box>
       </Box>
     );
   }
@@ -185,23 +246,19 @@ const DocumentViewer = ({ collection, onBack }) => {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text>Enter field to edit:</Text>
+          <Text>Editing field: <Text bold>{editField}</Text></Text>
+        </Box>
+        <Box>
+          <Text>Enter new value:</Text>
           <TextInput 
-            value={editField} 
-            onChange={setEditField} 
-            onSubmit={handleEditFieldSubmit} 
+            value={editValue} 
+            onChange={setEditValue} 
+            onSubmit={handleEditValueSubmit} 
           />
         </Box>
-        {editField && (
-          <Box>
-            <Text>Enter new value for {editField}:</Text>
-            <TextInput 
-              value={editValue} 
-              onChange={setEditValue} 
-              onSubmit={handleEditValueSubmit} 
-            />
-          </Box>
-        )}
+        <Box marginTop={1}>
+          <Text dimColor>Press ESC to cancel editing</Text>
+        </Box>
       </Box>
     );
   }
@@ -235,19 +292,38 @@ const DocumentViewer = ({ collection, onBack }) => {
     );
   }
 
+  // 计算当前可见的字段
+  const visibleFields = fields.slice(columnOffset, columnOffset + visibleColumns);
+  const hasMoreLeft = columnOffset > 0;
+  const hasMoreRight = columnOffset + visibleColumns < fields.length;
+
   // Render document table
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold>Collection Documents</Text>
-        <Text> (Page {page + 1} of {Math.ceil(totalCount / pageSize)})</Text>
+        <Text> (Total: {totalCount} documents | Page {page + 1} of {Math.ceil(totalCount / pageSize)})</Text>
+      </Box>
+      
+      {/* 列导航指示器 */}
+      <Box marginBottom={1}>
+        <Text>
+          Fields {columnOffset + 1}-{Math.min(columnOffset + visibleColumns, fields.length)} of {fields.length}
+          {hasMoreLeft && ' « more fields'}
+          {hasMoreRight && ' more fields »'}
+        </Text>
       </Box>
       
       {/* Table header */}
       <Box>
-        {fields.slice(0, 5).map((field, index) => (
+        {visibleFields.map((field, index) => (
           <Box key={index} width={20} marginRight={1}>
-            <Text bold underline={field === sortField}>
+            <Text 
+              bold 
+              underline={field === sortField}
+              backgroundColor={index === selectedCol ? 'cyan' : undefined}
+              color={index === selectedCol ? 'black' : undefined}
+            >
               {field} {field === sortField ? (sortDirection === 1 ? '↑' : '↓') : ''}
             </Text>
           </Box>
@@ -257,9 +333,13 @@ const DocumentViewer = ({ collection, onBack }) => {
       {/* Table rows */}
       {documents.map((doc, rowIndex) => (
         <Box key={rowIndex} backgroundColor={rowIndex === selectedRow ? 'blue' : undefined}>
-          {fields.slice(0, 5).map((field, colIndex) => (
+          {visibleFields.map((field, colIndex) => (
             <Box key={colIndex} width={20} marginRight={1}>
-              <Text color={rowIndex === selectedRow ? 'white' : undefined}>
+              <Text 
+                color={rowIndex === selectedRow ? 'white' : undefined}
+                backgroundColor={rowIndex === selectedRow && colIndex === selectedCol ? 'cyan' : undefined}
+                bold={rowIndex === selectedRow && colIndex === selectedCol}
+              >
                 {formatValue(doc[field])}
               </Text>
             </Box>
@@ -270,10 +350,10 @@ const DocumentViewer = ({ collection, onBack }) => {
       {/* Controls */}
       <Box marginTop={1} flexDirection="column">
         <Text dimColor>
-          ← → : Navigate pages | ↑ ↓ : Select row | s: Search | o: Toggle sort | e: Edit
+          PgUp/PgDn: Navigate pages | ↑↓←→: Select field | e: Edit selected field | o: Toggle sort
         </Text>
         <Text dimColor>
-          f: First page | l: Last page | ESC: Back
+          f: First page | l: Last page | s: Search | [: First columns | ]: Last columns | ESC: Back
         </Text>
         {searchField && searchValue && (
           <Text>
