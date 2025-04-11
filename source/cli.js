@@ -7,18 +7,24 @@ import App from './app.js';
 const cli = meow(
 	`
 		Usage
-		  $ mongodb-tui
+		  $ mongodb-tui [options]
 
 		Options
-			--name  Your name
+			--url  MongoDB connection URL (default: mongodb://localhost:27017)
 
 		Examples
-		  $ mongodb-tui --name=Jane
-		  Hello, Jane
+		  $ mongodb-tui
+		  $ mongodb-tui --url=mongodb://username:password@localhost:27017
 	`,
 	{
 		importMeta: import.meta,
+		flags: {
+			url: {
+				type: 'string',
+				default: 'mongodb://localhost:27017'
+			}
+		}
 	},
 );
 
-render(<App name={cli.flags.name} />);
+render(<App />);
