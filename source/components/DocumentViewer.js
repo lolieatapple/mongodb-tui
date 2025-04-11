@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
 
 const DocumentViewer = ({ collection, onBack }) => {
+  const { stdout } = useStdout();
   const [loading, setLoading] = useState(true);
   const [documents, setDocuments] = useState([]);
   const [error, setError] = useState(null);
@@ -23,7 +24,28 @@ const DocumentViewer = ({ collection, onBack }) => {
   const [selectedCol, setSelectedCol] = useState(0);
   const [fields, setFields] = useState([]);
   const [columnOffset, setColumnOffset] = useState(0); // 添加列偏移量状态
-  const visibleColumns = 5; // 一次显示的列数
+  
+  // 根据终端宽度计算可见列数和列宽
+  const terminalWidth = stdout.columns || 80;
+  const minColumnWidth = 15; // 最小列宽
+  const maxColumnWidth = 40; // 最大列宽
+  const padding = 2; // 列间距
+  const reservedWidth = 10; // 为其他UI元素预留的宽度
+  
+  // 计算每列的宽度和可见列数
+  const calculateColumnSettings = () => {
+    const availableWidth = terminalWidth - reservedWidth;
+    
+    // 根据可用宽度计算合适的列宽
+    let columnWidth = Math.min(maxColumnWidth, Math.max(minColumnWidth, Math.floor(availableWidth / 5)));
+    
+    // 计算可以显示的列数
+    const visibleColumns = Math.max(1, Math.floor(availableWidth / (columnWidth + padding)));
+    
+    return { columnWidth, visibleColumns };
+  };
+  
+  const { columnWidth, visibleColumns } = calculateColumnSettings();
 
   // Load documents with pagination, sorting, and optional filtering
   const loadDocuments = async () => {
@@ -71,6 +93,11 @@ const DocumentViewer = ({ collection, onBack }) => {
         setFields(Array.from(allFields));
       }
       
+      // 确保selectedRow不超出当前页面的文档数量
+      if (docs.length > 0 && selectedRow >= docs.length) {
+        setSelectedRow(docs.length - 1);
+      }
+      
       setError(null);
     } catch (err) {
       setError(err.message);
@@ -82,6 +109,40 @@ const DocumentViewer = ({ collection, onBack }) => {
   useEffect(() => {
     loadDocuments();
   }, [collection, page, sortField, sortDirection, searchField, searchValue]);
+
+  // 当页面变化时，重置selectedRow为0
+  useEffect(() => {
+    setSelectedRow(0);
+  }, [page]);
+
+  // 当字段列表变化时，确保selectedCol在有效范围内
+  useEffect(() => {
+    if (fields.length > 0 && selectedCol >= fields.length) {
+      setSelectedCol(Math.min(selectedCol, fields.length - 1));
+    }
+  }, [fields, selectedCol]);
+
+  // 监听终端大小变化
+  useEffect(() => {
+    // 当终端大小变化时，确保columnOffset和selectedCol在有效范围内
+    if (fields.length > 0) {
+      const maxOffset = Math.max(0, fields.length - visibleColumns);
+      if (columnOffset > maxOffset) {
+        setColumnOffset(maxOffset);
+      }
+      
+      if (selectedCol >= visibleColumns) {
+        setSelectedCol(visibleColumns - 1);
+      }
+    }
+  }, [stdout.columns, visibleColumns]);
+
+  // 获取当前选中的字段名
+  const getCurrentFieldName = () => {
+    if (fields.length === 0) return '_id';
+    const actualColIndex = columnOffset + selectedCol;
+    return actualColIndex < fields.length ? fields[actualColIndex] : '_id';
+  };
 
   // Handle keyboard input
   useInput((input, key) => {
@@ -103,6 +164,20 @@ const DocumentViewer = ({ collection, onBack }) => {
     // If in special modes, don't process other keys
     if (searchMode || editMode) return;
     
+    // 如果没有文档，禁用导航键
+    if (documents.length === 0) {
+      if (key.pageDown && (page + 1) * pageSize < totalCount) {
+        setPage(p => p + 1);
+      } else if (key.pageUp && page > 0) {
+        setPage(p => p - 1);
+      } else if (input === 'f') {
+        setPage(0);
+      } else if (input === 'l') {
+        setPage(Math.floor(totalCount / pageSize));
+      }
+      return;
+    }
+    
     if (key.pageDown && (page + 1) * pageSize < totalCount) {
       // Page Down key for next page
       setPage(p => p + 1);
@@ -112,7 +187,7 @@ const DocumentViewer = ({ collection, onBack }) => {
     } else if (key.upArrow && selectedRow > 0) {
       // Up arrow to move selection up
       setSelectedRow(r => r - 1);
-    } else if (key.downArrow && selectedRow < Math.min(documents.length - 1, pageSize - 1)) {
+    } else if (key.downArrow && selectedRow < documents.length - 1) {
       // Down arrow to move selection down
       setSelectedRow(r => r + 1);
     } else if (key.leftArrow) {
@@ -136,11 +211,21 @@ const DocumentViewer = ({ collection, onBack }) => {
         }
       }
     } else if (input === 's') {
-      // Enter search mode
+      // Enter search mode with current field pre-selected
       setSearchMode(true);
+      setSearchField(getCurrentFieldName());
+      setSearchValue('');
     } else if (input === 'o') {
-      // Toggle sort direction
-      setSortDirection(d => d * -1);
+      // Toggle sort direction on current field
+      const currentField = getCurrentFieldName();
+      if (sortField === currentField) {
+        // 如果当前已经按这个字段排序，则切换排序方向
+        setSortDirection(d => d * -1);
+      } else {
+        // 否则，切换到按这个字段排序，默认升序
+        setSortField(currentField);
+        setSortDirection(1);
+      }
     } else if (input === 'e' && documents.length > 0) {
       // Enter edit mode for the selected field of the selected document
       if (fields.length > 0) {
@@ -219,12 +304,7 @@ const DocumentViewer = ({ collection, onBack }) => {
     return (
       <Box flexDirection="column">
         <Box marginBottom={1}>
-          <Text>Enter search field:</Text>
-          <TextInput 
-            value={searchField} 
-            onChange={setSearchField} 
-            onSubmit={() => handleSearchSubmit()} 
-          />
+          <Text>Searching field: <Text bold>{searchField}</Text></Text>
         </Box>
         <Box>
           <Text>Enter search value:</Text>
@@ -299,10 +379,10 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   // Render document table
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width={terminalWidth}>
       <Box marginBottom={1}>
         <Text bold>Collection Documents</Text>
-        <Text> (Total: {totalCount} documents | Page {page + 1} of {Math.ceil(totalCount / pageSize)})</Text>
+        <Text> (Total: {totalCount} documents | Page {page + 1} of {Math.ceil(totalCount / pageSize)} | Terminal width: {terminalWidth}px)</Text>
       </Box>
       
       {/* 列导航指示器 */}
@@ -317,7 +397,7 @@ const DocumentViewer = ({ collection, onBack }) => {
       {/* Table header */}
       <Box>
         {visibleFields.map((field, index) => (
-          <Box key={index} width={20} marginRight={1}>
+          <Box key={index} width={columnWidth} marginRight={1}>
             <Text 
               bold 
               underline={field === sortField}
@@ -334,13 +414,13 @@ const DocumentViewer = ({ collection, onBack }) => {
       {documents.map((doc, rowIndex) => (
         <Box key={rowIndex} backgroundColor={rowIndex === selectedRow ? 'blue' : undefined}>
           {visibleFields.map((field, colIndex) => (
-            <Box key={colIndex} width={20} marginRight={1}>
+            <Box key={colIndex} width={columnWidth} marginRight={1}>
               <Text 
                 color={rowIndex === selectedRow ? 'white' : undefined}
                 backgroundColor={rowIndex === selectedRow && colIndex === selectedCol ? 'cyan' : undefined}
                 bold={rowIndex === selectedRow && colIndex === selectedCol}
               >
-                {formatValue(doc[field])}
+                {formatValue(doc[field], columnWidth)}
               </Text>
             </Box>
           ))}
@@ -366,13 +446,15 @@ const DocumentViewer = ({ collection, onBack }) => {
 };
 
 // Helper function to format values for display
-const formatValue = (value) => {
+const formatValue = (value, maxWidth = 20) => {
   if (value === undefined || value === null) return '';
   if (typeof value === 'object') {
     if (value instanceof Date) return value.toISOString();
-    return JSON.stringify(value).substring(0, 18) + (JSON.stringify(value).length > 18 ? '...' : '');
+    const stringified = JSON.stringify(value);
+    return stringified.substring(0, maxWidth - 3) + (stringified.length > maxWidth - 3 ? '...' : '');
   }
-  return String(value).substring(0, 18) + (String(value).length > 18 ? '...' : '');
+  const stringValue = String(value);
+  return stringValue.substring(0, maxWidth - 3) + (stringValue.length > maxWidth - 3 ? '...' : '');
 };
 
 export default DocumentViewer;
