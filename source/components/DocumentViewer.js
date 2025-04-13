@@ -28,6 +28,9 @@ const DocumentViewer = ({ collection, onBack }) => {
   const [detailMode, setDetailMode] = useState(false);
   const [detailField, setDetailField] = useState('');
   const [detailValue, setDetailValue] = useState('');
+  // 添加删除确认状态
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deleteDocId, setDeleteDocId] = useState(null);
   
   // 根据终端宽度计算可见列数和列宽
   const terminalWidth = stdout.columns || 80;
@@ -171,6 +174,33 @@ const DocumentViewer = ({ collection, onBack }) => {
     setDetailValue(fieldValue);
   };
 
+  // 打开删除确认对话框
+  const openDeleteConfirmation = () => {
+    if (documents.length === 0) return;
+    
+    setDeleteMode(true);
+    setDeleteDocId(documents[selectedRow]._id);
+  };
+
+  // 执行删除文档操作
+  const handleDeleteDocument = async () => {
+    try {
+      setLoading(true);
+      
+      await collection.deleteOne({ _id: deleteDocId });
+      
+      setDeleteMode(false);
+      setDeleteDocId(null);
+      
+      // 重新加载文档列表
+      await loadDocuments();
+    } catch (err) {
+      setError(`Failed to delete document: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle keyboard input
   useInput((input, key) => {
     if (key.escape) {
@@ -187,8 +217,23 @@ const DocumentViewer = ({ collection, onBack }) => {
         setDetailMode(false);
         setDetailField('');
         setDetailValue('');
+      } else if (deleteMode) {
+        // 退出删除确认
+        setDeleteMode(false);
+        setDeleteDocId(null);
       } else {
         onBack();
+      }
+      return;
+    }
+    
+    // 如果在删除确认模式，处理确认/取消操作
+    if (deleteMode) {
+      if (input === 'y') {
+        handleDeleteDocument();
+      } else if (input === 'n') {
+        setDeleteMode(false);
+        setDeleteDocId(null);
       }
       return;
     }
@@ -275,6 +320,9 @@ const DocumentViewer = ({ collection, onBack }) => {
           setEditValue(documents[selectedRow][fields[actualFieldIndex]]?.toString() || '');
         }
       }
+    } else if (input === 'd' && documents.length > 0) {
+      // 打开删除确认对话框
+      openDeleteConfirmation();
     } else if (input === 'f') {
       // Go to first page
       setPage(0);
@@ -546,6 +594,26 @@ const DocumentViewer = ({ collection, onBack }) => {
     return renderDetailView();
   }
 
+  // 删除确认对话框
+  if (deleteMode) {
+    return (
+      <Box flexDirection="column" width={terminalWidth - 2} borderStyle="round" borderColor="red" padding={1}>
+        <Box marginBottom={1}>
+          <Text bold color="red">⚠️ Delete Document</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text>Are you sure you want to delete document with ID: <Text bold color="yellow">{deleteDocId?.toString()}</Text>?</Text>
+        </Box>
+        <Box marginBottom={1}>
+          <Text>This action <Text color="red" bold>cannot be undone</Text>.</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text>Press <Text color="green" bold>y</Text> to confirm or <Text color="red" bold>n</Text> to cancel</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   if (loading) {
     return (
       <Box>
@@ -636,6 +704,7 @@ const DocumentViewer = ({ collection, onBack }) => {
           <Text color="cyan" bold>PgUp</Text>/<Text color="cyan" bold>PgDn</Text>: Navigate pages | 
           <Text color="cyan" bold>↑↓←→</Text>: Select field | 
           <Text color="green" bold>e</Text>: Edit selected field | 
+          <Text color="green" bold>d</Text>: Delete document | 
           <Text color="green" bold>o</Text>: Toggle sort
         </Text>
         <Text color="gray">
