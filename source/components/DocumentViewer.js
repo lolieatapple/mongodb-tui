@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
 import Spinner from 'ink-spinner';
 import TextInput from 'ink-text-input';
+import { ObjectId } from 'mongodb';
 
 const DocumentViewer = ({ collection, onBack }) => {
   const { stdout } = useStdout();
@@ -65,7 +66,10 @@ const DocumentViewer = ({ collection, onBack }) => {
       
       // Build query
       let query = {};
-      if (searchField && searchValue) {
+      // 保存原始页码，用于在没有搜索时恢复
+      const originalPage = page;
+      
+      if (searchValue) {
         try {
           // Try to parse the search value as a number or boolean if appropriate
           let parsedValue = searchValue;
@@ -73,9 +77,101 @@ const DocumentViewer = ({ collection, onBack }) => {
           else if (searchValue.toLowerCase() === 'false') parsedValue = false;
           else if (!isNaN(Number(searchValue))) parsedValue = Number(searchValue);
           
-          query[searchField] = parsedValue;
+          // Create a regex for fuzzy matching with case insensitivity
+          const regexValue = new RegExp(searchValue, 'i');
+          
+          // If searchField is specified, search only in that field
+          if (searchField && searchField !== '_all') {
+            // 特殊处理 _id 字段，尝试使用 ObjectId
+            if (searchField === '_id') {
+              try {
+                // 尝试完全匹配 ObjectId
+                if (searchValue.length === 24 && /^[0-9a-fA-F]{24}$/.test(searchValue)) {
+                  query._id = new ObjectId(searchValue);
+                } else {
+                  // 如果不是完整的 ObjectId 格式，使用正则表达式进行模糊匹配
+                  // MongoDB 的 _id 在字符串表示中是 24 位十六进制字符
+                  // 我们尝试匹配用户输入的部分内容
+                  query._id = { $regex: searchValue, $options: 'i' };
+                }
+              } catch (error) {
+                // 如果转换 ObjectId 失败，回退到正则匹配
+                query._id = { $regex: searchValue, $options: 'i' };
+              }
+            } else {
+              // 对于其他字段，使用之前的逻辑
+              // Use regex for string values to enable fuzzy matching
+              if (typeof parsedValue === 'string') {
+                query[searchField] = regexValue;
+              } else {
+                // For non-string values, use exact match
+                query[searchField] = parsedValue;
+              }
+            }
+          } else {
+            // Global search across all fields
+            // Create an $or query to search across all fields
+            const allFields = fields.length > 0 ? fields : ['_id'];
+            query.$or = allFields.map(field => {
+              // 特殊处理 _id 字段
+              if (field === '_id') {
+                try {
+                  // 尝试完全匹配 ObjectId
+                  if (searchValue.length === 24 && /^[0-9a-fA-F]{24}$/.test(searchValue)) {
+                    return { _id: new ObjectId(searchValue) };
+                  } else {
+                    // 如果不是完整的 ObjectId 格式，使用正则表达式进行模糊匹配
+                    return { _id: { $regex: searchValue, $options: 'i' } };
+                  }
+                } catch (error) {
+                  // 如果转换 ObjectId 失败，回退到正则匹配
+                  return { _id: { $regex: searchValue, $options: 'i' } };
+                }
+              }
+              // 对于其他字段，使用之前的逻辑
+              return { [field]: typeof parsedValue === 'string' ? regexValue : parsedValue };
+            });
+          }
         } catch (e) {
-          query[searchField] = searchValue;
+          // Fallback to simple string search if there's an error
+          if (searchField && searchField !== '_all') {
+            if (searchField === '_id') {
+              try {
+                // 尝试完全匹配 ObjectId
+                if (searchValue.length === 24 && /^[0-9a-fA-F]{24}$/.test(searchValue)) {
+                  query._id = new ObjectId(searchValue);
+                } else {
+                  // 如果不是完整的 ObjectId 格式，使用正则表达式进行模糊匹配
+                  query._id = { $regex: searchValue, $options: 'i' };
+                }
+              } catch (error) {
+                // 如果转换 ObjectId 失败，回退到正则匹配
+                query._id = { $regex: searchValue, $options: 'i' };
+              }
+            } else {
+              query[searchField] = new RegExp(searchValue, 'i');
+            }
+          } else {
+            // Global search with fallback
+            const allFields = fields.length > 0 ? fields : ['_id'];
+            query.$or = allFields.map(field => {
+              if (field === '_id') {
+                try {
+                  // 尝试完全匹配 ObjectId
+                  if (searchValue.length === 24 && /^[0-9a-fA-F]{24}$/.test(searchValue)) {
+                    return { _id: new ObjectId(searchValue) };
+                  } else {
+                    // 如果不是完整的 ObjectId 格式，使用正则表达式进行模糊匹配
+                    return { _id: { $regex: searchValue, $options: 'i' } };
+                  }
+                } catch (error) {
+                  // 如果转换 ObjectId 失败，回退到正则匹配
+                  return { _id: { $regex: searchValue, $options: 'i' } };
+                }
+              }
+              return { [field]: new RegExp(searchValue, 'i') };
+            });
+          }
         }
       }
       
@@ -83,13 +179,24 @@ const DocumentViewer = ({ collection, onBack }) => {
       const total = await collection.countDocuments(query);
       setTotalCount(total);
       
+      // 如果有搜索条件，并且总数不为0，但当前页没有数据，则自动调整到第一页
+      let currentPage = page;
+      if (searchValue && total > 0) {
+        // 在搜索模式下，始终从第一页开始显示结果
+        currentPage = 0;
+        // 只有在有搜索条件时才更新页码状态
+        if (page !== 0) {
+          setPage(0);
+        }
+      }
+      
       // Get documents for current page
       const sort = {};
       sort[sortField] = sortDirection;
       
       const docs = await collection.find(query)
         .sort(sort)
-        .skip(page * pageSize)
+        .skip(currentPage * pageSize)
         .limit(pageSize)
         .toArray();
       
@@ -290,67 +397,21 @@ const DocumentViewer = ({ collection, onBack }) => {
         setColumnOffset(offset => offset + 1);
         if (selectedCol === visibleColumns - 1) {
           // 如果选择在最右边的可见列，保持选择在最右边
-          setSelectedCol(visibleColumns - 1);
+          setSelectedCol(c => c + 1);
         }
       }
     } else if (input === 's') {
-      // Enter search mode with current field pre-selected
-      setSearchMode(true);
+      // 's' key to enter search mode for current field
       setSearchField(getCurrentFieldName());
-      setSearchValue('');
-    } else if (input === 'o') {
-      // Toggle sort direction on current field
-      const currentField = getCurrentFieldName();
-      if (sortField === currentField) {
-        // 如果当前已经按这个字段排序，则切换排序方向
-        setSortDirection(d => d * -1);
-      } else {
-        // 否则，切换到按这个字段排序，默认升序
-        setSortField(currentField);
-        setSortDirection(1);
-      }
-    } else if (input === 'e' && documents.length > 0) {
-      // Enter edit mode for the selected field of the selected document
-      if (fields.length > 0) {
-        const actualFieldIndex = columnOffset + selectedCol;
-        if (actualFieldIndex < fields.length) {
-          setEditMode(true);
-          setEditField(fields[actualFieldIndex]);
-          setEditDocId(documents[selectedRow]._id);
-          setEditValue(documents[selectedRow][fields[actualFieldIndex]]?.toString() || '');
-        }
-      }
-    } else if (input === 'd' && documents.length > 0) {
-      // 打开删除确认对话框
-      openDeleteConfirmation();
-    } else if (input === 'f') {
-      // Go to first page
-      setPage(0);
-    } else if (input === 'l') {
-      // Go to last page
-      setPage(Math.floor(totalCount / pageSize));
-    } else if (input === '[') {
-      // 滚动到最左边的列
-      setColumnOffset(0);
-      setSelectedCol(0);
-    } else if (input === ']') {
-      // 滚动到最右边的列
-      const maxOffset = Math.max(0, fields.length - visibleColumns);
-      setColumnOffset(maxOffset);
-      setSelectedCol(Math.min(visibleColumns - 1, fields.length - 1 - maxOffset));
+      setSearchMode(true);
+      return;
+    } else if (input === 'g') {
+      // 'g' key to enter global search mode (search across all fields)
+      setSearchField('_all');
+      setSearchMode(true);
+      return;
     }
   });
-
-  const handleSearchSubmit = () => {
-    setSearchMode(false);
-    // The search will be applied via the useEffect
-  };
-
-  const handleEditFieldSubmit = () => {
-    if (editField) {
-      setEditValue(documents[selectedRow][editField]?.toString() || '');
-    }
-  };
 
   const handleEditValueSubmit = async () => {
     try {
@@ -516,7 +577,7 @@ const DocumentViewer = ({ collection, onBack }) => {
           <Text bold color="yellow">🔍 Search Documents</Text>
         </Box>
         <Box marginBottom={1}>
-          <Text>Searching in field: <Text bold color="green">{getCurrentFieldName()}</Text></Text>
+          <Text>Searching in field: <Text bold color="green">{searchField ? (searchField === '_all' ? 'All Fields (Global Search)' : searchField) : getCurrentFieldName()}</Text></Text>
         </Box>
         <Box marginBottom={1}>
           <Box marginRight={1}>
@@ -525,7 +586,15 @@ const DocumentViewer = ({ collection, onBack }) => {
           <TextInput 
             value={searchValue} 
             onChange={setSearchValue} 
-            onSubmit={handleSearchSubmit}
+            onSubmit={() => {
+              // Set the search field - if not explicitly set, use the current field or global search
+              if (!searchField) {
+                const currentField = getCurrentFieldName();
+                setSearchField(currentField);
+              }
+              setSearchMode(false);
+              // The search will be applied via the useEffect
+            }}
           />
         </Box>
         <Box marginTop={1}>
@@ -552,7 +621,11 @@ const DocumentViewer = ({ collection, onBack }) => {
           <TextInput 
             value={editField} 
             onChange={setEditField} 
-            onSubmit={handleEditFieldSubmit}
+            onSubmit={() => {
+              setEditMode(true);
+              setEditValue(String(documents[selectedRow][editField]));
+              setEditDocId(documents[selectedRow]._id);
+            }}
           />
         </Box>
         <Box marginTop={1}>
@@ -710,15 +783,15 @@ const DocumentViewer = ({ collection, onBack }) => {
         <Text color="gray">
           <Text color="green" bold>f</Text>: First page | 
           <Text color="green" bold>l</Text>: Last page | 
-          <Text color="green" bold>s</Text>: Search | 
+          <Text color="green" bold>s</Text>: Search Field | <Text color="green" bold>g</Text>: Global Search | 
           <Text color="green" bold>[</Text>: First columns | 
           <Text color="green" bold>]</Text>: Last columns | 
           <Text color="cyan" bold>Enter</Text>: View details | 
           <Text color="cyan" bold>ESC</Text>: Back
         </Text>
-        {searchField && searchValue && (
+        {searchValue && (
           <Text>
-            Filtering by: <Text color="yellow" bold>{searchField}</Text> = <Text color="green" bold>{searchValue}</Text>
+            Filtering by: <Text color="yellow" bold>{searchField === '_all' ? 'All Fields' : searchField}</Text> {searchField === '_all' ? 'contains' : '='} <Text color="green" bold>{searchValue}</Text>
           </Text>
         )}
       </Box>
