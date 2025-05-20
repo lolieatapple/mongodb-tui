@@ -410,6 +410,10 @@ const DocumentViewer = ({ collection, onBack }) => {
       setSearchField('_all');
       setSearchMode(true);
       return;
+    } else if (input === 'd') {
+      // 'd' key to delete the current document
+      openDeleteConfirmation();
+      return;
     }
   });
 
