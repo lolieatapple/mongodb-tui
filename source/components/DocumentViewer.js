@@ -179,12 +179,11 @@ const DocumentViewer = ({ collection, onBack }) => {
       const total = await collection.countDocuments(query);
       setTotalCount(total);
       
-      // 如果有搜索条件，并且总数不为0，但当前页没有数据，则自动调整到第一页
+      // 修复：只有在初次搜索时才重置页码，而不是每次加载文档时都重置
       let currentPage = page;
-      if (searchValue && total > 0) {
-        // 在搜索模式下，始终从第一页开始显示结果
+      if (searchMode && searchValue) {
+        // 只有在搜索模式下且刚提交搜索时才重置页码
         currentPage = 0;
-        // 只有在有搜索条件时才更新页码状态
         if (page !== 0) {
           setPage(0);
         }
@@ -226,7 +225,14 @@ const DocumentViewer = ({ collection, onBack }) => {
 
   useEffect(() => {
     loadDocuments();
-  }, [collection, page, sortField, sortDirection, searchField, searchValue]);
+  }, [collection, page, sortField, sortDirection]);  // 移除 searchField 和 searchValue 依赖
+  
+  // 添加单独的 useEffect 来处理搜索条件变化
+  useEffect(() => {
+    if (searchField && searchValue) {
+      loadDocuments();
+    }
+  }, [searchField, searchValue]);
 
   // 当页面变化时，重置selectedRow为0
   useEffect(() => {
@@ -414,6 +420,18 @@ const DocumentViewer = ({ collection, onBack }) => {
       // 'd' key to delete the current document
       openDeleteConfirmation();
       return;
+    } else if (input === 'o') {
+      // 'o' key to toggle sort direction or change sort field
+      const currentField = getCurrentFieldName();
+      if (currentField === sortField) {
+        // 如果当前字段已经是排序字段，则切换排序方向
+        setSortDirection(sortDirection === 1 ? -1 : 1);
+      } else {
+        // 如果选择了新字段，设置为新的排序字段并默认为升序
+        setSortField(currentField);
+        setSortDirection(1);
+      }
+      return;
     }
   });
 
@@ -597,7 +615,8 @@ const DocumentViewer = ({ collection, onBack }) => {
                 setSearchField(currentField);
               }
               setSearchMode(false);
-              // The search will be applied via the useEffect
+              // 手动调用 loadDocuments 而不是依赖 useEffect
+              loadDocuments();
             }}
           />
         </Box>
